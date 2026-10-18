@@ -1,0 +1,22 @@
+# 依赖
+node_modules/
+
+# 构建产物（由 npm run build 生成）
+lib/
+*.tsbuildinfo
+
+# 打包产物（由 npm pack 生成）
+*.tgz
+
+# 日志
+*.log
+
+# 开发过程文档（monorepo 时期的设计稿与截图，仅本地留档，不随仓库分发）
+docs/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+PUBLISHING.md

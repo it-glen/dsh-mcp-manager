@@ -1,0 +1,29 @@
+{
+  // 测试面编译配置：基础选项与包根 tsconfig.json 同源（单包仓不引外部 extends），
+  // 差异只在 noEmit 与 include 面。
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "jsx": "react",
+    "noEmitOnError": true,
+    "useDefineForClassFields": true,
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["./**/*.ts", "../src/**/*.d.ts"],
+  // e2e 面（test/e2e/**）整体不参与本编译面：
+  //   - smoke.test.ts 是文件级 @ts-nocheck 的产物契约测试，本就不产生类型诊断；
+  //   - cross-end-lock.test.ts 没有 pragma，但它同样静态 import 本包构建产物 lib/index.js。
+  "exclude": ["e2e/**"]
+}

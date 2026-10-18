@@ -1,0 +1,111 @@
+/**
+ * dsh-mcp-manager — catalog/impl/injection/index.ts：能力目录注入决策（#664 阶段 5）。
+ *
+ * 自 src/catalog.ts 拆出（injection 域）：pre-step 监听器的目录注入决策纯函数，
+ * 完全复刻官方 dsh-tool-skill 的 catalog 语义（根治重复注入）。
+ */
+
+import {
+  composeCatalogEntries,
+  findCatalogMessage,
+  resolveCatalogEntries,
+  renderMcpCatalogMessage,
+  renderMcpCatalogUpdate,
+  DEFAULT_CATALOG_MAX_ENTRIES,
+} from "../entries/index.ts";
+import type { CatalogCache, SupervisorLite } from "../entries/index.ts";
+import { digestCatalogEntries } from "../digest/index.ts";
+import { catalogHistory } from "../history/index.ts";
+import type { CatalogAgent } from "../history/index.ts";
+
+/** 会话消息最小面（pre-step decision.messages / session.snapshotEvents()）。 */
+export interface CatalogMessage {
+  id?: unknown;
+  role?: string;
+  content?: Array<{ type?: string; text?: string }>;
+  source?: {
+    kind?: unknown;
+    plugin?: unknown;
+    form?: unknown;
+    entries?: unknown;
+    sections?: unknown;
+  };
+}
+
+/** pre-step 决策最小面。 */
+export interface CatalogDecision {
+  kind: string;
+  messages: CatalogMessage[];
+}
+
+/**
+ * 本轮不注入时的决策：撤掉本轮刚注入的那条目录消息（幂等——本轮没注入过就原样回）。
+ * 「历史 digest 相同」与「从未发布且无服务器」两条不注入分支共用此写法（同一份撤销动作）。
+ */
+function withoutInjectedCatalog(
+  decision: CatalogDecision,
+  existing: CatalogMessage | undefined,
+): CatalogDecision {
+  if (existing === undefined) return decision;
+  return {
+    kind: "enter",
+    messages: decision.messages.filter((message) => message.id !== existing.id),
+  };
+}
+
+/** 本轮已注入的那条目录消息，其 digest 是否已等于要注入的 digest（相等 → 本轮原样回，
+ * 不重复注入也不撤销）。本轮没注入过（existing 为 undefined）即不等。 */
+function injectedDigestMatches(existing: CatalogMessage | undefined, digest: string): boolean {
+  if (existing === undefined) return false;
+  const existingEntries = resolveCatalogEntries(existing.source);
+  return existingEntries !== undefined && digestCatalogEntries(existingEntries) === digest;
+}
+
+/**
+ * 目录注入决策（纯函数，pre-step 监听器薄调用，便于单测）。
+ * 完全复刻官方 dsh-tool-skill 的 catalog 语义（根治重复注入）：
+ * 1. 历史（session.snapshotEvents()）digest 相同 → 本轮不注入（撤销本轮已注入的）——**去重源是历史而非本轮消息**；
+ * 2. 历史 digest 不同 → 注入"更新"消息（声明替换旧目录）；
+ * 3. 从未发布且无服务器 → 不注入；
+ * 4. compaction/resume 后旧目录不可见 → 重新注入（events-based 重建）。
+ * @param decision next() 的决策。
+ * @param messages 本轮输入消息（签名兼容）。
+ * @param supervisors manager.supervisors。
+ * @param maxEntries 目录条目上限。
+ * @param cache 目录缓存。
+ * @param agent pre-step 的 agent（session.snapshotEvents() 来源）。
+ * @returns 新决策。
+ */
+export function resolveCatalogInjection(
+  decision: CatalogDecision,
+  messages: CatalogMessage[],
+  supervisors: Map<string, SupervisorLite>,
+  maxEntries = DEFAULT_CATALOG_MAX_ENTRIES,
+  cache?: CatalogCache,
+  agent?: CatalogAgent,
+): CatalogDecision {
+  if (decision.kind === "reject") return decision;
+  const entries = composeCatalogEntries(supervisors, maxEntries, cache);
+  const digest = digestCatalogEntries(entries);
+  const history = catalogHistory(agent);
+  const existing = findCatalogMessage(decision.messages);
+
+  if (history.visibleDigest === digest) {
+    // 历史已发布相同目录 → 本轮不注入；撤销本轮刚注入的（幂等）。
+    return withoutInjectedCatalog(decision, existing);
+  }
+  if (injectedDigestMatches(existing, digest)) return decision;
+  if (!history.published && entries.length === 0) {
+    return withoutInjectedCatalog(decision, existing);
+  }
+  const catalog = history.published
+    ? renderMcpCatalogUpdate(entries)
+    : renderMcpCatalogMessage(entries);
+  return {
+    kind: "enter",
+    messages:
+      existing === undefined
+        ? [...decision.messages, catalog]
+        : decision.messages.map((message) => (message.id === existing.id ? catalog : message)),
+  };
+}

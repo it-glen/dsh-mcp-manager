@@ -1,0 +1,31 @@
+{
+  // 编译单元只在 src/ 内：src/shared/ 是包内业务模块，src/primitives/ 是原先跨包引用的
+  // 共享层（已内嵌为包内源码，打包期由 esbuild 内联）。故 rootDir 取 src/，
+  // .d.ts 落在 lib/<src 内相对路径>，与 package.json exports 声明的 ./lib/index.d.ts 对齐。
+  //
+  // .js 产物由 esbuild 从 src/ 源码直接打包（见 scripts/build.mjs），tsc 只产出 .d.ts。
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "sourceMap": false,
+    "jsx": "react",
+    "noEmitOnError": true,
+    "useDefineForClassFields": true,
+    "types": ["node"],
+    "outDir": "lib",
+    "rootDir": "src",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.css"],
+  "exclude": ["lib", "node_modules", "test"]
+}
