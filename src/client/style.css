@@ -24,6 +24,10 @@
   --dm-card-bg: color-mix(in srgb, #ffffff 42%, transparent);
   /* 行 hover：浅色黑 3%，深色白 7%（深色下黑 3% 近不可见） */
   --dm-row-hover: color-mix(in srgb, #000000 3%, transparent);
+  /* 输入控件底：浅色白 55% 提亮，深色白 7% 提亮（M1：禁止深色下写死浅色底） */
+  --dm-input-bg: color-mix(in srgb, #ffffff 55%, transparent);
+  /* 下沉容器底（粘贴框等），比输入框更淡 */
+  --dm-sunken-bg: color-mix(in srgb, #ffffff 40%, transparent);
   --dm-glass-edge: rgba(20, 30, 50, 0.1);
   --dm-glass-rim: rgba(255, 255, 255, 0.92);
   --dm-glass-shadow:
@@ -49,6 +53,8 @@
     --dm-wash: color-mix(in srgb, #ffffff 12%, transparent);
     --dm-card-bg: color-mix(in srgb, #ffffff 7%, transparent);
     --dm-row-hover: color-mix(in srgb, #ffffff 7%, transparent);
+    --dm-input-bg: color-mix(in srgb, #ffffff 7%, transparent);
+    --dm-sunken-bg: color-mix(in srgb, #ffffff 5%, transparent);
     --dm-glass-edge: rgba(255, 255, 255, 0.14);
     --dm-glass-rim: rgba(255, 255, 255, 0.12);
     --dm-glass-shadow:
@@ -70,6 +76,8 @@ html.dark,
   --dm-wash: color-mix(in srgb, #ffffff 12%, transparent);
   --dm-card-bg: color-mix(in srgb, #ffffff 7%, transparent);
   --dm-row-hover: color-mix(in srgb, #ffffff 7%, transparent);
+  --dm-input-bg: color-mix(in srgb, #ffffff 7%, transparent);
+  --dm-sunken-bg: color-mix(in srgb, #ffffff 5%, transparent);
   --dm-glass-edge: rgba(255, 255, 255, 0.14);
   --dm-glass-rim: rgba(255, 255, 255, 0.12);
   --dm-glass-shadow:
@@ -93,6 +101,8 @@ html.dark,
     --dm-wash: #eceff3;
     --dm-card-bg: #ffffff;
     --dm-row-hover: #eef1f5;
+    --dm-input-bg: #ffffff;
+    --dm-sunken-bg: #ffffff;
   }
   html.dark,
   [data-theme="dark"],
@@ -104,6 +114,8 @@ html.dark,
     --dm-wash: #2a2d34;
     --dm-card-bg: #17171a;
     --dm-row-hover: #26282f;
+    --dm-input-bg: #17171a;
+    --dm-sunken-bg: #17171a;
   }
   /* 高对比下隐藏装饰性高光层，失败行保留纯色语义底 */
   .dm-glass::before {
@@ -680,9 +692,10 @@ html.dark,
   color: var(--dsw-alias-state-error-primary, #e0483e);
   font-weight: 600;
 }
+/* 按钮在标题行右端，右内边距与 .dm-body 一致，右边缘落在内容区垂线上 */
 .dm-head button {
   border: 0.5px solid var(--dm-glass-edge);
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 55%, transparent);
+  background: var(--dm-input-bg);
   color: var(--dsw-alias-label-primary, #3a3f4b);
   border-radius: 99px;
   min-height: 28px;
@@ -691,6 +704,7 @@ html.dark,
   font-family: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
   transition:
     transform 160ms var(--dm-fluid),
     background-color 160ms var(--dm-fluid);
@@ -935,9 +949,9 @@ html.dark,
 }
 .dm-form {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* 三列等宽：名称 / 归属 / 传输类型 独占一行，每个约等于下方大框的三分之一 */
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px 12px;
-  max-width: 640px;
 }
 .dm-form .dm-full {
   grid-column: 1/-1;
@@ -946,25 +960,39 @@ html.dark,
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* 列宽可被内容撑大，否则 nowrap 标签会在窄列上溢出 */
+  min-width: 0;
 }
 .dm-field label {
   font-size: 11px;
   color: var(--dsw-alias-label-secondary, #525866);
   font-weight: 600;
   line-height: 1.4;
+  /* 标签单行：两列标签同高，输入框顶边才能对齐 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dm-field input,
 .dm-field select,
 .dm-field textarea {
+  box-sizing: border-box;
+  width: 100%;
   border: 0.5px solid var(--dm-glass-edge);
   border-radius: 10px;
   padding: 8px 10px;
   min-height: 36px;
   font-size: 12px;
   color: var(--dsw-alias-label-primary, #1c1e26);
-  background: color-mix(in srgb, #ffffff 55%, transparent);
+  background: var(--dm-input-bg);
   font-family: ui-monospace, Consolas, "PingFang SC", monospace;
   line-height: 1.45;
+}
+/* placeholder 显式跟随主题三级文字色；Firefox 自带 opacity 需重置 */
+.dm-field input::placeholder,
+.dm-field textarea::placeholder {
+  color: var(--dsw-alias-label-tertiary, #8a8f9c);
+  opacity: 1;
 }
 .dm-field textarea {
   min-height: 64px;
@@ -990,7 +1018,7 @@ html.dark,
 }
 .dm-form-actions button {
   border: 0.5px solid var(--dm-glass-edge);
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 55%, transparent);
+  background: var(--dm-input-bg);
   color: var(--dsw-alias-label-primary, #3a3f4b);
   border-radius: 99px;
   min-height: 32px;
@@ -1015,11 +1043,11 @@ html.dark,
   line-height: 1.5;
 }
 .dm-paste-box {
+  box-sizing: border-box;
   border: 0.5px solid var(--dm-glass-edge);
   border-radius: 16px;
   padding: 12px;
-  background: color-mix(in srgb, #ffffff 40%, transparent);
-  max-width: 640px;
+  background: var(--dm-sunken-bg);
 }
 .dm-result {
   font-size: 12px;

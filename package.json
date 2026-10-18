@@ -1,6 +1,6 @@
 {
   "name": "@it-glen/dsh-mcp-manager",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server manager for DeepSeek Harness: add, configure and monitor MCP servers (stdio / streamable-http) from a side panel. DSH MCP 管理器：侧边栏添加、配置与监控 MCP 服务器。",
   "type": "module",
   "main": "lib/index.js",
