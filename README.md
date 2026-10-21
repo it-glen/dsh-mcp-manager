@@ -354,6 +354,19 @@ npx vitest run --project unit
   即 `cwd:""` 固定 `@global`，不回落到别人的 projectRoot）；客户端恢复节流按 cwd 分键覆盖
   resume，不同 cwd 的恢复不互吞。
 - 依赖 Node ≥ 20
+- **`ws_mcp_call` 的远端转发不经宿主 `tools/pre-execute` 策略链**（0.3.2 起）：转发子调用
+  改由本包取宿主注册表里的官方 `ToolDefinition` 直调其 `execute`，不再走
+  `ctx.tools.execute`。原因见 `src/server/connection/runtime/middleware.ts` 的注释——宿主
+  那条路在 agent-less 执行体上会崩（`reading 'seq'`），带上 agent 又被本包自己的
+  `restrict({ deny: [...] })` 挡成 `UNKNOWN_TOOL`，两条路都堵死。代价：沙箱 / 审计 /
+  超时策略钩子对 MCP 子调用不生效。MCP 是网络请求、不落本地文件，工具级禁用仍由
+  dispatch 侧 `isToolDenied` 裁决，转发登记表仍是 `mcp__` 直呼的唯一放行位。
+- **转发执行取全局视图，`restrict` 与 agent 作用域可见性对其不生效**（0.3.2 起）：
+  `ctx.tools.get(name)` 省略 scope 即取全局注册表，而 `restrict` / 作用域可见性只作用于
+  agent 作用域。这是**有意为之**——同一 agent 上正是本包自己下的 `restrict({ deny: [...] })`，
+  若按 agent 作用域解析，子调用会被自己的限制挡死（`UNKNOWN_TOOL`）。要点：**本包的
+  「模型看不到 `mcp__*`」靠的是摘除与中间层转发，不是 restrict**；工具级禁用在
+  `ws_mcp_call` 入口（`isToolDenied`）与 `mcp__` 直呼守卫两处独立裁决，与本条无关。
 
 ## 类型依赖
 

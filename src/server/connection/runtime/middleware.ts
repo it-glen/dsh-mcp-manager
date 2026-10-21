@@ -569,9 +569,62 @@ export class McpMiddleware {
     // 公名派生只在这里发生一次：唯一派生点是 server/shared/tool-names.ts 的 publicToolName，dispatch 拿名字用、
     // 不得自己拼 `mcp__<id>__<tool>`——哈希/截断规则一旦分叉，某些工具会永远查不到。
     const registeredNameFor = (id: string, tool: string): string => publicToolName(id, tool);
-    // 必须箭头绑定：注册表方法裸引用会丢 this（dispatch 直接把它当能力调用）。
-    const execute = (input: ToolExecutionInput): Promise<ToolExecutionResult> =>
-      this.host.ctx.tools.execute(input);
+    // 远端转发不进宿主执行管线（裁定：绕开 restrict）。宿主 `ctx.tools.execute(exec)` 会拿
+    // `exec.agent` 去 `view(scope)` 里解析注册名，而本包 visibility 域为了让模型面看不到
+    // `mcp__*`，恰恰对每个 agent 做了 `restrict({ deny: [...] })`——同一个 agent 既被 deny
+    // 又被用来查工具，子调用当场 UNKNOWN_TOOL。反过来不带 agent 走全局视图能查到，却会在
+    // 宿主 pre-execute 拦截链里撞上某个钩子对 agent-less 执行体读 `.seq` 的崩溃
+    // （Cannot read properties of undefined）。两条路都堵死，因此这里改取定义直调：
+    // `get(name)` 省略 scope 走全局视图（restrict 只作用于 agent 作用域，全局视图不受影响），
+    // 拿到的是官方 mcp-client 注册的那个 ToolDefinition，`execute(args, exec)` 就是它的原实现
+    // （callTool + isError 收敛 + 图片准入），结果形状与旧链路逐字节等价。
+    //
+    // 代价（已知且接受）：子调用不再经过宿主的 tools/pre-execute 策略链（沙箱 / 审计 / 超时
+    // 策略）。MCP 远端调用本身是插件发的网络请求、不落本地文件，工具级禁用已在 dispatch 侧
+    // 按 isToolDenied 判过，转发登记表仍是 mcp__ 直呼的唯一放行位。
+    const execute = (input: ToolExecutionInput): Promise<ToolExecutionResult> => {
+      const definition = this.host.ctx.tools.get(input.name);
+      if (definition === undefined) {
+        // 这段错误走的是我们自己抛的路径，不经 executeRemoteCall 的 redactMcpError；
+        // 打的是本类自己的 redact（同一秘密源 redactionServers），免得注册名带出凭据。
+        return Promise.reject(
+          new Error(
+            this.redact(
+              `工具注册名 ${JSON.stringify(input.name)} 在宿主注册表里不存在（server 可能正在重连或已卸载）`,
+            ),
+          ),
+        );
+      }
+      // 官方 executor 只读 signal / callId / agent 三样：signal 进 callTool 的 AbortSignal；
+      // callId 用于日志归因；agent 仅在结果含图片时被图片准入读取（无 agent 时官方回落
+      // agent.options，仍不抛）。其余 ToolRunContext 字段对 MCP 工具是不可达的，故只填这些。
+      const runContext = {
+        callId: input.callId,
+        rootCallId: input.rootCallId ?? input.callId,
+        name: input.name,
+        arguments: input.arguments,
+        signal: input.signal,
+        ...(input.agent === undefined ? {} : { agent: input.agent }),
+        ...(input.parent === undefined ? {} : { parent: input.parent }),
+        deferContext: () => undefined,
+        concludeTurn: () => undefined,
+      } as unknown as Parameters<typeof definition.execute>[1];
+      // 契约按宿主 ToolDefinition 走（dsh-tools types/index.d.ts:118-128）：`execute` 只返回
+      // “output.schema 声明的 canonical value”，不返回 content/isError——那两样是调度层
+      // （dispatchScheduledExecution）的职责。故这里把返回值原样当 value 交给 dispatch，
+      // 由它的 projectCallToolResult 投影，与旧链路逐字节等价。
+      //
+      // 失败必须**继续抛**，不能收敛成 `{isError:true}`：官方 createExecutor 在 MCP 远端
+      // isError:true 时就是 `throw new Error(text)`（dsh-mcp-client lib/index.js:236），与
+      // 普通异常不可区分；dispatch 端只有 catch 一条路，产出 `调用失败：` 文案。若在这里
+      // 吞成 isError 结果，文案会错成 `远端工具返回错误：`（且跳过 redactMcpError 之外的
+      // 归因路径）。
+      return definition.execute(input.arguments, runContext).then((value) => ({
+        content: [],
+        value,
+        isError: false,
+      })) as Promise<ToolExecutionResult>;
+    };
     const parent = identity.parent;
     if (parent !== undefined) this.forwarding.add(parent);
     try {

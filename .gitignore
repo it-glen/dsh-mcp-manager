@@ -11,6 +11,10 @@ lib/
 # 日志
 *.log
 
+# 本地验证报告（run-tests.ps1 产出，仅本机留档）
+*-report.txt
+test-report.txt.err
+
 # 开发过程文档（monorepo 时期的设计稿与截图，仅本地留档，不随仓库分发）
 docs/
 

@@ -11,6 +11,7 @@
  * 其余域函数（findProjectRoot/normalizedProjectRoot/full-name）由
  * unit-manager2 / unit-middleware 既有断言面覆盖（T1：经域门面 re-export 面）。
  */
+import { mkdir, realpath } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,7 +105,11 @@ describe("makeResolveRoot 基本路由（迁移自 apply-runtime.ts，行为不�
   });
 
   it("cwd 归一化项目根优先（不回落 @global）", async () => {
-    expect(await resolveRoot({ session: { header: { cwd: "/proj" } } })).toBe("/proj");
+    // 归一化走 node:path（resolve/realpath），判据必须用平台原生绝对路径：
+    // POSIX 字面量 "/proj" 在 Windows 上会被解析成当前盘符根下的 \proj。
+    const proj = join(dir, "proj");
+    await mkdir(proj, { recursive: true });
+    expect(await resolveRoot({ session: { header: { cwd: proj } } })).toBe(await realpath(proj));
   });
 });
 

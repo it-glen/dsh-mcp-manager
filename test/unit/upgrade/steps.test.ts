@@ -90,12 +90,25 @@ describe("STEPS 表接线：装配方驱动的确实是本包迁移动作", () =
     writeFileSync(configFile(), storedData, "utf8");
 
     await assemble();
-    expect(readFileSync(versionFile(), "utf8").trim()).toBe("0.2.9");
+    expect(readFileSync(versionFile(), "utf8").trim()).toBe(newestTargetVersion(STEPS));
     expect(readFileSync(configFile(), "utf8")).toBe(storedData);
 
     releaseUpgrade();
     await assemble();
-    expect(readFileSync(versionFile(), "utf8").trim()).toBe("0.2.9");
+    expect(readFileSync(versionFile(), "utf8").trim()).toBe(newestTargetVersion(STEPS));
+    expect(readFileSync(configFile(), "utf8")).toBe(storedData);
+  });
+
+  it("刻度停在 0.2.9（改名后的三个版本漏登记）→ 一次装配补到最新一格，不再报缺口", async () => {
+    // 现场形态：@wingsky-1 时代的 0.2.9 刻度 + @it-glen 0.3.x 的包。表里若没有 0.2.9 之后的
+    // 步子，链跑完 diagnoseGap 仍判「落后」，每次启动报警——这条用例守的就是那一格。
+    const storedData = '{"servers":["keep exactly"]}\n';
+    mkdirSync(dirname(versionFile()), { recursive: true });
+    writeFileSync(versionFile(), "0.2.9\n", "utf8");
+    writeFileSync(configFile(), storedData, "utf8");
+
+    await assemble();
+    expect(readFileSync(versionFile(), "utf8").trim()).toBe(newestTargetVersion(STEPS));
     expect(readFileSync(configFile(), "utf8")).toBe(storedData);
   });
 });

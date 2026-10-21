@@ -97,6 +97,15 @@ function permissionBits(path: string): number {
   return statSync(path).mode & 0o777;
 }
 
+/**
+ * POSIX 权限判据是否适用。Windows 的 `chmod` 只映射到只读位，`mode & 0o777` 拿不到
+ * 0o600 / 0o644 / 0o700 这些语义——断言在那边的失败是平台差异，不是迁移回归。
+ * 迁移动作本身（内容 / 归档 / 幂等）两端都有判据，跳过只丢 mode 这一条。
+ */
+function posixModes(): boolean {
+  return process.platform !== "win32";
+}
+
 /** 目录里已归档的名字（幂等判据：每个源文件只该有一个固定后缀的归档）。 */
 function bakNames(dir: string): string[] {
   return readdirSync(dir)
@@ -120,7 +129,8 @@ describe("单文件四态", () => {
         entry.label,
         legacyText(entry.label),
       ]);
-      expect([entry.label, permissionBits(entry.target)]).toEqual([entry.label, entry.mode]);
+      // mode 只在 POSIX 上是判据（Windows 的 chmod 映射不表达 0o600 / 0o644）。
+      if (posixModes()) expect([entry.label, permissionBits(entry.target)]).toEqual([entry.label, entry.mode]);
       expect([entry.label, existsSync(entry.legacy)]).toEqual([entry.label, false]);
       expect([entry.label, readFileSync(`${entry.legacy}${MIGRATED_SUFFIX}`, "utf8")]).toEqual([
         entry.label,
@@ -177,10 +187,11 @@ describe("单文件四态", () => {
         entry.label,
         entry.initial,
       ]);
-      expect([entry.label, permissionBits(entry.target)]).toEqual([entry.label, entry.mode]);
+      // mode 只在 POSIX 上是判据（Windows 的 chmod 映射不表达 0o600 / 0o644）。
+      if (posixModes()) expect([entry.label, permissionBits(entry.target)]).toEqual([entry.label, entry.mode]);
     }
     // 插件自有目录与本包最敏感的一档权限：同机其它用户不得列举。
-    expect(permissionBits(join(home, "@it-glen", "dsh-mcp-manager"))).toBe(0o700);
+    if (posixModes()) expect(permissionBits(join(home, "@it-glen", "dsh-mcp-manager"))).toBe(0o700);
   });
 });
 

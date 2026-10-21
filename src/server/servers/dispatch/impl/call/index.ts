@@ -37,7 +37,7 @@ type CallEntry =
       : never
     : never;
 
-/** 远端子调用入参：合成 callId、透传可选字段，并**不带 agent**。 */
+/** 远端子调用入参：合成 callId、透传 agent 与 parent。 */
 export function remoteExecutionInput(
   input: DispatchCallInput,
   id: string,
@@ -49,10 +49,12 @@ export function remoteExecutionInput(
     ...(input.rootCallId === undefined ? {} : { rootCallId: input.rootCallId }),
     name: input.registeredNameFor(id, tool),
     arguments: typeof args === "object" && args !== null ? args : {},
-    // #767 笔 1b F4 收口：远端转发**不带 agent**。带了就等于把子调用挂回该 agent 的作用域，
-    // 而本包已把 mcp__* 从每个 agent 的模型视野摘掉——自家转发会被自己那条 deny 一起打死。
-    // 不带 agent 走全局面（guard 靠 parent ∈ forwarding 放行）；代价是官方执行器那次图片
-    // 准入退化成文本，由本包自持的 image-admission 经 finalizeContent 补回来。
+    // 远端转发带 agent + parent。宿主 `ctx.tools.execute` 侧的执行体若不带给调用方 agent，
+    // pre-execute 拦截链会在 agent-less 执行体上崩（Cannot read properties of undefined
+    // reading 'seq'）；带上则能进各钩子的正常工作分支。agent 在这里只作为执行上下文传递，
+    // 注册名解析已改走全局视图（见 connection/runtime/middleware.ts 的 execute），因此 agent
+    // 肩上的 restrict deny 不会再把子调用挡成 UNKNOWN_TOOL。
+    ...(input.agent === undefined ? {} : { agent: input.agent as ToolExecutionInput["agent"] }),
     ...(input.parent === undefined ? {} : { parent: input.parent }),
     // 宿主 executor 无条件读 signal.aborted（实测 §2.9-6：给 undefined 当场 TypeError），
     // 而调用方不保证带 signal——没有就现造一个。

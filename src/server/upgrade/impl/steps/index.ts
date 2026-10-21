@@ -29,4 +29,7 @@ export const STEPS: readonly UpgradeStep<UpgradeDeps>[] = [
   { fromVersion: "0.2.7", targetVersion: "0.2.8", run: tickUpgradeVersion },
   // 0.2.8 → 0.2.9 为空步（本版无 MCP 管理器 home 级存储形态变化）：run 指共享空函数。
   { fromVersion: "0.2.8", targetVersion: "0.2.9", run: tickUpgradeVersion },
+  // 0.2.9 → 0.3.2 为空步：rename 到 @it-glen 后的三个版本（0.3.0 / 0.3.1 / 0.3.2）都无 home 级
+  // 存储形态变化，但当时漏登记，刻度因此永久停在 0.2.9，每次启动都报「缺少对应的升级步骤」。
+  { fromVersion: "0.2.9", targetVersion: "0.3.2", run: tickUpgradeVersion },
 ];

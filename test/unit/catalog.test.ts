@@ -462,6 +462,34 @@ describe("catalogHistory", () => {
     expect(catalogHistory(agentBadThenGood).visibleDigest).toEqual(digest);
   });
 
+  it("无 seq 的占位条目不得污染扫描与可见目录", () => {
+    // 宿主 637d519b 现场：日志里夹着无 seq 的占位条目。改前 `visible.has(undefined)`
+    // 直接跳过可见目录，整轮 catalogHistory 退化成 published:false。
+    const digest = digestCatalogEntries(entry);
+    expect(
+      catalogHistory({
+        session: {
+          surface: { nodes: [10] },
+          snapshotEvents: () => [
+            { type: "session", seq: undefined, data: undefined },
+            event(10),
+            null,
+            { type: "tool/result", seq: 12, data: { message: {} } },
+          ] as never,
+        },
+      }),
+    ).toEqual({ visibleDigest: digest, published: true });
+    // seq 全无 → 只能报未定位，不得抛。
+    expect(
+      catalogHistory({
+        session: {
+          surface: { nodes: [10] },
+          snapshotEvents: () => [{ type: "user/message", seq: undefined, data: { source: snapSource(entry) } }] as never,
+        },
+      }),
+    ).toEqual({ published: false });
+  });
+
   it("只有非目录消息 → {published:false}", () => {
     expect(
       catalogHistory({
@@ -827,7 +855,9 @@ describe("V4 catalog source 识别", () => {
 });
 
 describe("removeRootEntry 写回失败清理（#903 crash）", () => {
-  it("写回失败只 warn 且无 tmp 残留", async () => {
+  // 前提是「目录只读即写不进去」：POSIX 的目录权限语义。Windows 的 chmod 映射不改变
+  // 新建文件的能力，注入不了写失败——判据在那边的替代形态是 store.test 的 rename 端口用例。
+  it.skipIf(process.platform === "win32")("写回失败只 warn 且无 tmp 残留", async () => {
     const dir = mkdtempSync(join(tmpdir(), "dsh-mcp-catrm-"));
     const cachePath = join(dir, "cache.json");
     writeFileSync(

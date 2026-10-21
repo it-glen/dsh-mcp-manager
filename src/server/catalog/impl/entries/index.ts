@@ -372,7 +372,11 @@ export interface CatalogSourceLike {
 /** 渲染"目录更新"消息（历史旧目录无法删除，新消息声明作废——与 tool-skill 同语义）。 */
 export function renderMcpCatalogUpdate(entries: CatalogEntry[]): CatalogMessage {
   const body = renderMcpCatalogMessage(entries);
-  const inner = body.content![0].text!.split("\n").slice(3).join("\n");
+  // renderMcpCatalogMessage 写死单 text 块；脏数据下 `body.content![0].text!` 的 `!` 只是
+  // 编译期断言，运行时拿到 undefined 会让 split 当场抛 TypeError（宿主只回一句
+  // "Cannot read properties of undefined"）。这里读不到正文就按空目录渲染更新帧，
+  // 绝不抛：本组件的抛错会连带整步工具面。
+  const inner = (body.content?.[0]?.text ?? "").split("\n").slice(3).join("\n");
   const text = [
     "<system-reminder>",
     "MCP catalog updated; this replaces all previous available_mcp_servers lists:",

@@ -317,6 +317,45 @@ export function fakeToolsService(script: FakeToolsScript = {}) {
     schemas() {
       return schemas;
     },
+    /**
+     * 全局视图取定义：宿主 `ctx.tools.get(name)` 省略 scope 时的读口。中间层的远端转发不走
+     * `tools.execute`，而是取官方 ToolDefinition 直调其 `execute`（绕开 restrict 与
+     * pre-execute 两条死路，见 middleware.ts 的注释），故夹具必须提供这一面。
+     *
+     * 契约对齐（dsh-tools types/index.d.ts:118-128）：官方 `ToolDefinition.execute` 只返回
+     * “output.schema 声明的 canonical value”。而本夹具的 `script.execute` 是个更宽的
+     * 替身——多数用例写它时模拟的是**调度层**结果 `{isError, content, value}`。这里做一次
+     * 收窄：取 `.value`（失败则以 isError 抛错，与官方 createExecutor 一致），免得每个用例
+     * 都得按两种语义各写一遍。
+     *
+     * 为什么不在 `schemas` 里查存在性：多数调用面用例只给 `execute` 脚本、不登记注册名
+     * （它们的判据是投影收敛与文案，不是注册面）。夹具若要求先登记，等于给用例加了一道
+     * 它们从未表达过的前置条件——那考的是夹具，不是被测代码。
+     */
+    get(name: string) {
+      const service = this;
+      return {
+        name,
+        // 第二个参数是宿主 ToolRunContext；`script.execute` 是调度层替身，看的是扁平 input
+        // （parent / signal / agent 都在顶层），故这里把上下文平铺合并进去再转调。
+        //
+        // 失败语义对齐官方 createExecutor（dsh-mcp-client lib/index.js:226-255）：
+        // MCP 远端 isError:true 时它是 **throw new Error(text)**，与普通异常不可区分。
+        // 因此这里也一律抛出——dispatch 端只有一条 catch，产出「调用失败：」文案；
+        // `远端工具返回错误：` 分支在新链路不可达（isError 结果不会从 execute 返回）。
+        async execute(args: unknown, exec?: Record<string, unknown>) {
+          const outcome = (await service.execute({
+            name,
+            arguments: args,
+            ...(exec ?? {}),
+          })) as { isError?: boolean; value?: unknown; error?: { message?: string } } | undefined;
+          if (outcome?.isError === true) {
+            throw new Error(outcome.error?.message ?? "远端工具返回错误");
+          }
+          return outcome?.value;
+        },
+      };
+    },
     async execute(input: unknown) {
       executed.push(input);
       if (script.execute) return await script.execute(input);

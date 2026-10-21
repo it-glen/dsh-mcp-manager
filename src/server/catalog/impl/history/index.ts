@@ -42,16 +42,26 @@ function matchCatalogEvent(
 /** 会话面上本块要的两件输入：当前可见的节点集 + 持久化事件流。宿主面可能整段缺席
  *  （agent 缺席 / 无 session / 无 surface / 0.1.2-rc.1 前无 snapshotEvents），
  *  一律读成空面而不是抛——「读不到历史」与「历史为空」同义，调用方都走重新注入。 */
+interface CatalogEvent {
+  type?: string;
+  seq?: unknown;
+  data?: { source?: CatalogSourceLike };
+}
+
 interface CatalogSession {
   visible: Set<unknown>;
-  events: ReadonlyArray<{ type?: string; seq?: unknown; data?: { source?: CatalogSourceLike } }>;
+  events: ReadonlyArray<CatalogEvent>;
 }
 
 function readCatalogSession(agent: CatalogAgent | undefined): CatalogSession {
   const session = agent?.session;
   return {
     visible: new Set(session?.surface?.nodes ?? []),
-    events: session?.snapshotEvents?.() ?? [],
+    // 宿主日志可能夹着无 seq 的占位条目（截断/种子恢复），先滤掉：下面按 seq 认可见性，
+    // 让 undefined 漏进来就是 element 级污染，不是"读不到历史"。
+    events: (session?.snapshotEvents?.() ?? []).filter(
+      (event): event is CatalogEvent => typeof event?.seq === "number",
+    ),
   };
 }
 

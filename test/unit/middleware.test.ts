@@ -3381,7 +3381,7 @@ describe("#767 笔 1b：A+ 图片准入接线与 F4 转发去 agent", () => {
     expect(swap(e1, v1), "已消费过的 exec 不再有投影").toBe(undefined);
   });
 
-  it("B16 F4：远端转发不带 agent，parent = 外层 token，signal 照传", async () => {
+  it("B16 F4：远端转发带 agent（宿主 pre-execute 需要它），parent = 外层 token，signal 照传", async () => {
     const fixture = await callFixture({
       value: { content: [{ type: "text", text: "hi" }] },
       faces: undefined,
@@ -3396,7 +3396,12 @@ describe("#767 笔 1b：A+ 图片准入接线与 F4 转发去 agent", () => {
       signal: unknown;
     };
     expect(sent.name).toBe("mcp__id-py__echo");
-    expect(sent.agent, "远端分支去 agent（F4 收口）").toBe(undefined);
+    // F4 原设计是「远端转发不带 agent」，理由是不让子调用挂回 agent 作用域。但宿主
+    // tools/pre-execute 的某个钩子对 agent-less 执行体读 `.seq` 会当场抛 TypeError
+    // （Cannot read properties of undefined (reading 'seq')），整条 ws_mcp_call 必挂。
+    // 0.3.2 起改为透传 agent，同时远端转发改走「取全局视图定义直调」以避开 restrict
+    // 造成的 UNKNOWN_TOOL（见 middleware.ts 的注释）。
+    expect(sent.agent, "远端分支透传 agent（宿主 pre-execute 需要）").toEqual(exec.agent);
     expect(sent.parent).toBe("tok-1");
     expect(sent.signal).toBe(exec.signal);
   });

@@ -446,6 +446,26 @@ npx vitest run --project unit
   someone else's projectRoot); the client recovery throttle covers resume keyed by cwd, so
   recoveries for different cwds never swallow each other.
 - Requires Node ≥ 20
+- **`ws_mcp_call` remote forwarding does not pass through the host's `tools/pre-execute`
+  policy chain** (since 0.3.2): the forwarded sub-call is executed by fetching the official
+  `ToolDefinition` from the host registry and invoking its `execute` directly instead of
+  going through `ctx.tools.execute`. See the comment in
+  `src/server/connection/runtime/middleware.ts` — on that path an agent-less execution body
+  crashes (`reading 'seq'`), while attaching the agent makes this package's own
+  `restrict({ deny: [...] })` reject the call as `UNKNOWN_TOOL`; both routes are dead ends.
+  Trade-off: sandbox / audit / timeout policy hooks do not apply to MCP sub-calls. MCP is a
+  network request that writes no local files, per-tool disabling is still decided by
+  `isToolDenied` in the dispatch layer, and the forwarding ledger remains the only admit
+  path for direct `mcp__` calls.
+- **Forwarded execution resolves against the global view, so `restrict` and agent-scope
+  visibility do not apply to it** (since 0.3.2): `ctx.tools.get(name)` without a scope reads
+  the global registry, while `restrict` / scope visibility only affect the agent scope. This
+  is **deliberate** — the same agent carries this package's own
+  `restrict({ deny: [...] })`, so resolving per agent scope would strangle the sub-call with
+  our own restriction (`UNKNOWN_TOOL`). Takeaway: **"the model cannot see `mcp__*`" is
+  enforced by removal plus middleware forwarding, not by `restrict`**; per-tool disabling is
+  decided independently at the `ws_mcp_call` entry (`isToolDenied`) and by the direct-call
+  guard, neither of which is affected by this.
 
 ## Type dependencies
 

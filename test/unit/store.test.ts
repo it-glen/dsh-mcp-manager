@@ -27,7 +27,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // I8 导入面收窄：store/config 两域门面直引，不再经包根组合根。
@@ -557,7 +557,8 @@ describe("B17：save 失败时 tmp 残留必须清理", () => {
 
   it("B17：save 失败后真名 tmp 残留应清理（#903 M-store：旧断言查从未创建过的名字，空转）", async () => {
     const { victimPath, store } = victimFixture();
-    const dir = victimPath.slice(0, victimPath.lastIndexOf("/"));
+    // victimPath 是 POSIX 分隔符拼出来的绝对路径，Windows 反斜杠下 lastIndexOf("/") 会切错。
+    const dir = dirname(victimPath);
     await store.save().catch(() => {});
     // 真残留名前缀 = <path>.tmp.（pid.时间戳[.随机].tmp）：目录枚举断言，而非查固定名。
     const leftovers = readdirSync(dir).filter((name) => name.startsWith("victim.tmp."));
@@ -674,7 +675,8 @@ describe("Windows rename 暂时占用重试", () => {
           expect(calls).toBe(2);
           expect(tmpPaths[0]).toBe(tmpPaths[1]);
           expect(await readFile(path, "utf8")).toBe(expected);
-          expect(statSync(path).mode & 0o777).toBe(0o600);
+          // mode 判据只在 POSIX 上有意义（Windows 的 chmod 映射不表达 0o600）。
+          if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
           expect(store.snapshot).toBe(expected);
           expect(store.mtimeMs).toBe(statSync(path).mtimeMs);
           expect(readdirSync(dir).filter((name) => name.startsWith("mcp.json.tmp."))).toEqual([]);
@@ -915,7 +917,8 @@ describe("S2-b：save 取 mode 表 + 显式路径回落", () => {
     await store.save();
     expect(existsSync(path)).toBe(true);
     expect(JSON.parse(await readFile(path, "utf8")).servers[0].name).toBe("s");
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    // Windows 无 0o600 语义（chmod 只落只读位），落盘成功与内容才是跨平台判据。
+    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
   it("项目级新形态路径 save 落 null 口径（file-io 层已覆盖 null 写面，此处只锁登记 + 落盘成功）", async () => {
